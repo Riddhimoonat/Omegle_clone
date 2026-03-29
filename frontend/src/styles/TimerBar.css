@@ -1,0 +1,26 @@
+.timer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2a3a;
+  transition: background 0.5s;
+}
+
+.timer-bar.study { background: #12121a; }
+.timer-bar.break { background: #0f1f0f; }
+
+.timer-label   { font-size: 13px; color: #888; }
+.timer-display { font-size: 20px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+
+.timer-btn {
+  padding: 6px 14px;
+  background: #2a2a3a;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.timer-btn:hover { background: #6366f1; }

@@ -1,64 +1,37 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
-const app = express();
-app.use(cors());
-const PORT = 9000;
+// ─────────────────────────────────────────────
+// server.js — entry point
+// Sirf setup karta hai
+// Koi logic nahi — sab handlers mein hai
+// ─────────────────────────────────────────────
 
-const httpServer = http.createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
-  },
-});
+import express from "express"
+import http from "http"
+import { Server } from "socket.io"
+import { PORT, CORS_ORIGIN } from "./config/config.js"
+import connectionHandler from "./handlers/connectionHandler.js"
+import matchHandler      from "./handlers/matchHandler.js"
+import webrtcHandler     from "./handlers/webrtcHandler.js"
+import chatHandler       from "./handlers/chatHandler.js"
 
-let waitingUser = null;
+const app    = express()
+const server = http.createServer(app)
+const io     = new Server(server, {
+  cors: { origin: CORS_ORIGIN }
+})
+
+app.get("/health", (_, res) => res.json({ status: "ok" }))
 
 io.on("connection", (socket) => {
-  console.log("a clint connected", socket.id);
-  //random matching logic
-  if (waitingUser) {
-    socket.partner = waitingUser;
-    waitingUser.partner = socket;
-    socket.emit("matched", { id: waitingUser.id });
-    waitingUser.emit("matched", { id: socket.id });
-    waitingUser = null;
-  } else {
-    waitingUser = socket;
-  }
-  //forward webRTC signals
-  socket.on("offer", (data) => {
-    socket.partner?.emit("offer", {
-      offer: data.offer,
-      senter: socket.id,
-    });
-  });
+  console.log("✅ Connected:", socket.id)
 
-  socket.on("answer", (data) => {
-    socket.partner?.emit("answer", {
-      answer: data.answer,
-    });
-  });
+  // Har handler apna kaam karta hai
+  // server.js sirf delegate karta hai
+  connectionHandler(socket, io)
+  matchHandler(socket, io)
+  webrtcHandler(socket)
+  chatHandler(socket)
+})
 
-  socket.on("ice-candidate", (data) => {
-    socket.partner?.emit("ice-candidate", {
-      candidate: data.candidate,
-    });
-  });
-
-  socket.on("disconnect", () => {
-    console.log("disconnected", socket.id);
-
-    if (socket.partner) {
-      socket.partner.emit("partner-disconected");
-      socket.partner.partner = null;
-    }
-    if (waitingUser === socket) waitingUser = null;
-  });
-});
-
-httpServer.listen(PORT, () => {
-  console.log("server started ", PORT);
-});
+server.listen(PORT, () => {
+  console.log(`🚀 Server on port http://localhost:${PORT}`)
+})

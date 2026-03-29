@@ -1,88 +1,104 @@
-import { useEffect, useRef } from "react";
-import { io } from "socket.io-client";
+// ─────────────────────────────────────────────
+// App.jsx — sirf components jodta hai
+// Koi logic nahi, koi socket nahi
+// Sab hooks mein hai
+// ─────────────────────────────────────────────
 
-const socket = io("http://localhost:9000");
+import useSocket from "./hooks/useSocket";
+import useMatch from "./hooks/useMatch";
+import useWebRTC from "./hooks/useWebRTC";
+import useChat from "./hooks/useChat";
+
+import TopicPicker from "./components/TopicPicker";
+import MatchStatus from "./components/MatchStatus";
+import VideoSection from "./components/VideoSection";
+import ChatSection from "./components/ChatSection";
+import ControlBar from "./components/ControlBar";
+import TimerBar from "./components/TimerBar";
+
+import "./styles/App.css";
 
 function App() {
-  const localVideo = useRef(null);
-  const remoteVideo = useRef(null);
-  const pc = useRef(null);
+  const { socketId, isConnected, onlineCount } = useSocket();
 
-  useEffect(() => {
-    startCamera();
+  const {
+    status,
+    room,
+    partnerId,
+    partnerStream,
+    isInitiator,
+    myStream,
+    findMatch,
+    findNext,
+  } = useMatch();
 
-    socket.on("matched", async ({ id }) => {
-      console.log("Matched with", id);
+  const {
+    localVideoRef,
+    remoteVideoRef,
+    dataChannel,
+    callStatus,
+    isMuted,
+    isCamOff,
+    toggleMute,
+    toggleCamera,
+  } = useWebRTC({
+    room,
+    partnerId,
+    isInitiator,
+    isMatched: status === "matched",
+  });
 
-      pc.current = createPeer();
+  const { messages, sendMessage } = useChat({
+    room,
+    socketId,
+    dataChannel,
+  });
 
-      const offer = await pc.current.createOffer();
-      await pc.current.setLocalDescription(offer);
-
-      socket.emit("offer", { offer });
-    });
-
-    socket.on("offer", async ({ offer }) => {
-      pc.current = createPeer();
-
-      await pc.current.setRemoteDescription(offer);
-
-      const answer = await pc.current.createAnswer();
-      await pc.current.setLocalDescription(answer);
-
-      socket.emit("answer", { answer });
-    });
-
-    socket.on("answer", async ({ answer }) => {
-      await pc.current.setRemoteDescription(answer);
-    });
-
-    socket.on("ice-candidate", async ({ candidate }) => {
-      await pc.current.addIceCandidate(candidate);
-    });
-
-  }, []);
-
-  const startCamera = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true
-    });
-
-    localVideo.current.srcObject = stream;
-    window.localStream = stream;
-  };
-
-  const createPeer = () => {
-    const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
-
-    window.localStream.getTracks().forEach(track => {
-      peer.addTrack(track, window.localStream);
-    });
-
-    peer.ontrack = (e) => {
-      remoteVideo.current.srcObject = e.streams[0];
-    };
-
-    peer.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit("ice-candidate", {
-          candidate: e.candidate
-        });
-      }
-    };
-
-    return peer;
-  };
+  // ── UI: Kaunsa screen dikhana hai ─────────────
+  // 1. Idle     → TopicPicker (stream choose karo)
+  // 2. Waiting  → MatchStatus (dhund raha hai...)
+  // 3. Matched  → Full app   (video + chat)
 
   return (
-    <div>
-      <h1>Omegle Clone</h1>
+    <div className="app">
+      {/* Online count — hamesha dikhta hai */}
+      <div className="online-badge">🟢 {onlineCount} online</div>
 
-      <video ref={localVideo} autoPlay muted width="300" />
-      <video ref={remoteVideo} autoPlay width="300" />
+      {/* Screen 1: Stream choose karo */}
+      {status === "idle" && (
+        <TopicPicker onSelect={findMatch} isConnected={isConnected} />
+      )}
+
+      {/* Screen 2: Match dhund raha hai */}
+      {status === "waiting" && <MatchStatus stream={myStream} />}
+
+      {/* Screen 3: Connected! */}
+      {status === "matched" && (
+        <div className="session">
+          <VideoSection
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            partnerStream={partnerStream}
+            callStatus={callStatus}
+          />
+
+          <div className="right-panel">
+            <TimerBar room={room} /> {/* ← add karo sabse upar */}
+            <ChatSection
+              messages={messages}
+              onSend={sendMessage}
+              socketId={socketId}
+            />
+            <ControlBar
+              isMuted={isMuted}
+              isCamOff={isCamOff}
+              onToggleMute={toggleMute}
+              onToggleCamera={toggleCamera}
+              onNext={findNext}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
